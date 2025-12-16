@@ -1,0 +1,41 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <Version>1.0.0</Version>
+    <Authors>MrBytesized</Authors>
+    <Company>BytesizedMedia</Company>
+    <Product>OpenTK DearImGui</Product>
+    <Description>A production-ready, feature-rich ImGui Controller for OpenTK. Supports Docking, Multi-Viewports, Gamepads, and High-DPI.</Description>
+    <PackageTags>OpenTK;ImGui;GameDev;UI;OpenGL;ImGuiNET</PackageTags>
+    <RepositoryUrl>https://github.com/W1ll-Gale/Bytesized.OpenTK.DearImGui</RepositoryUrl>
+    
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Roboto-Regular.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Roboto-Regular.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+    <PackageReference Include="OpenTK" Version="4.9.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="LICENSE.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+</Project>

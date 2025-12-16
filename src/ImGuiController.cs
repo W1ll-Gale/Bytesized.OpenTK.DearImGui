@@ -80,7 +80,7 @@ namespace OpenTK.DearImGui
             {
                 LoadEmbeddedFont("Roboto-Regular.ttf", 16.0f * 1.0f);
             }
-            catch (Exception ex)
+            catch 
             {
                 io.Fonts.AddFontDefault();
             }
