@@ -211,6 +211,11 @@ namespace OpenTK.DearImGui
             ImGuiIOPtr io = ImGui.GetIO();
             io.Fonts.GetTexDataAsRGBA32(out IntPtr pixels, out int width, out int height, out int bytesPerPixel);
 
+            if (_fontTexture != 0)
+            {
+                GL.DeleteTexture(_fontTexture);
+                _fontTexture = 0;
+            }
             _fontTexture = GL.GenTexture();
             GL.BindTexture(TextureTarget.Texture2D, _fontTexture);
             GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
@@ -261,10 +266,22 @@ namespace OpenTK.DearImGui
         /// <returns>True if loaded successfully, false otherwise.</returns>
         public bool LoadEmbeddedFont(string resourceName, float sizePixels)
         {
-            Assembly? assembly = Assembly.GetExecutingAssembly();
+            if (string.IsNullOrWhiteSpace(resourceName))
+            {
+                throw new ArgumentException("Resource name cannot be null or whitespace.", nameof(resourceName));
+            }
 
-            string? resourcePath = assembly.GetManifestResourceNames()
-                .FirstOrDefault(r => r.EndsWith(resourceName));
+            if (!float.IsFinite(sizePixels) || sizePixels <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(sizePixels), sizePixels, "Font size must be finite and > 0.");
+            }
+
+            Assembly assembly = typeof(ImGuiController).Assembly;
+
+            string[] resourceNames = assembly.GetManifestResourceNames();
+
+            string? resourcePath = resourceNames
+                .FirstOrDefault(r => r.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
 
             if (resourcePath == null)
             {
@@ -274,9 +291,18 @@ namespace OpenTK.DearImGui
             byte[] fontData;
             using (Stream? stream = assembly.GetManifestResourceStream(resourcePath))
             {
-                if (stream == null) return false;
+                if (stream == null)
+                {
+                    return false;
+                }
+
+                if (stream.Length <= 0)
+                {
+                    return false;
+                }
+
                 fontData = new byte[stream.Length];
-                stream.Read(fontData, 0, fontData.Length);
+                stream.ReadExactly(fontData);
             }
 
             IntPtr pData = Marshal.AllocHGlobal(fontData.Length);
@@ -285,7 +311,9 @@ namespace OpenTK.DearImGui
             unsafe
             {
                 ImFontConfig* nativeConfig = ImGuiNative.ImFontConfig_ImFontConfig();
-                nativeConfig->FontDataOwnedByAtlas = 0;
+
+                nativeConfig->FontDataOwnedByAtlas = 1;
+
                 nativeConfig->FontData = (void*)pData;
                 nativeConfig->FontDataSize = fontData.Length;
                 nativeConfig->SizePixels = sizePixels;
@@ -691,7 +719,6 @@ namespace OpenTK.DearImGui
                     int newSize = (int)Math.Max(_vertexBufferSize * 1.5f, vertexSize);
                     GL.BufferData(BufferTarget.ArrayBuffer, newSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
                     _vertexBufferSize = newSize;
-                    Console.WriteLine($"Resized Vertex Buffer to {_vertexBufferSize}");
                 }
 
                 int indexSize = cmd_list.IdxBuffer.Size * sizeof(ushort);
@@ -700,7 +727,6 @@ namespace OpenTK.DearImGui
                     int newSize = (int)Math.Max(_indexBufferSize * 1.5f, indexSize);
                     GL.BufferData(BufferTarget.ElementArrayBuffer, newSize, IntPtr.Zero, BufferUsageHint.DynamicDraw);
                     _indexBufferSize = newSize;
-                    Console.WriteLine($"Resized Index Buffer to {_indexBufferSize}");
                 }
 
                 GL.BufferSubData(BufferTarget.ArrayBuffer, IntPtr.Zero, vertexSize, cmd_list.VtxBuffer.Data);
@@ -769,7 +795,7 @@ namespace OpenTK.DearImGui
             if (success == 0)
             {
                 string info = GL.GetProgramInfoLog(program);
-                Console.WriteLine($"GL.LinkProgram for {name} failed: {info}");
+                Console.Error.WriteLine($"Error [ImGuiController]: GL.LinkProgram for {name} failed: {info}");
             }
 
             GL.DeleteShader(vs);
@@ -794,7 +820,7 @@ namespace OpenTK.DearImGui
             if (success == 0)
             {
                 string info = GL.GetShaderInfoLog(shader);
-                Console.WriteLine($"GL.CompileShader for {name} failed: {info}");
+                Console.Error.WriteLine($"Error [ImGuiController]: GL.CompileShader for {name} failed: {info}");
             }
 
             return shader;
@@ -810,7 +836,7 @@ namespace OpenTK.DearImGui
             OpenTK.Graphics.OpenGL4.ErrorCode error;
             while ((error = GL.GetError()) != OpenTK.Graphics.OpenGL4.ErrorCode.NoError)
             {
-                Console.WriteLine($"{title}: {error}");
+                Console.WriteLine($"Error [ImGuiController]: {title}: {error}");
             }
         }
 
