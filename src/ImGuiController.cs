@@ -341,17 +341,15 @@ namespace OpenTK.DearImGui
         /// <summary>
         /// Updates ImGui state for the current frame, including input and timing.
         /// </summary>
-        /// <param name="wnd">The GameWindow providing input state.</param>
         /// <param name="dt">Delta time in seconds since the last frame.</param>
-        public void Update(GameWindow wnd, float dt)
+        public void Update(float dt)
         {
             if (_frameBegun)
             {
                 ImGui.Render();
             }
-
             SetPerFrameImGuiData(dt);
-            UpdateImGuiInput(wnd);
+            UpdateImGuiInput(_wnd);
             UpdateImGuiGamepad();
 
             _frameBegun = true;
