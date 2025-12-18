@@ -6,7 +6,8 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <Version>1.0.0</Version>
+	<PackageId>Bytesized.OpenTK.DearImGui</PackageId>     
+    <Version>1.1.0</Version>
     <Authors>MrBytesized</Authors>
     <Company>BytesizedMedia</Company>
     <Product>OpenTK DearImGui</Product>

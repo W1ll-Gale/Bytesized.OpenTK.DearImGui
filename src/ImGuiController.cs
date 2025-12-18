@@ -20,6 +20,30 @@ namespace OpenTK.DearImGui
     /// </summary>
     public class ImGuiController : IDisposable
     {
+        /// <summary>
+        /// Controls how (or if) this controller is allowed to modify the window cursor.
+        /// </summary>
+        public enum CursorManagementMode
+        {
+            /// <summary>
+            /// Never changes <see cref="GameWindow.CursorState"/> or <see cref="GameWindow.Cursor"/>.
+            /// The application fully owns cursor behavior.
+            /// </summary>
+            Disabled = 0,
+
+            /// <summary>
+            /// Only changes cursor while ImGui is actively capturing the mouse.
+            /// Restores the application cursor state once ImGui stops capturing.
+            /// </summary>
+            WhenImGuiCapturesMouse = 1,
+
+            /// <summary>
+            /// Always applies ImGui cursor changes (even if ImGui is not capturing).
+            /// This is rarely desirable for games.
+            /// </summary>
+            Always = 2
+        }
+
         private bool _frameBegun;
         private int _vertexArray;
         private int _vertexBuffer;
@@ -35,6 +59,10 @@ namespace OpenTK.DearImGui
         private Vector2 _scaleFactor = Vector2.One;
 
         private readonly GameWindow _wnd;
+
+        private bool _cursorOverridden;
+        private CursorState _cursorStateBeforeOverride;
+        private MouseCursor? _cursorBeforeOverride;
 
         /// <summary>
         /// Gets a value indicating whether ImGui wants to capture mouse input.
@@ -53,10 +81,20 @@ namespace OpenTK.DearImGui
         public float MouseScrollScale { get; set; } = 1.0f;
 
         /// <summary>
-        /// Gets or sets whether ImGuiController should force the window cursor state.
-        /// If false, cursor state is left to the application except when ImGui is actively capturing the mouse.
+        /// Gets or sets how this controller manages the window cursor.
         /// </summary>
-        public bool ForceCursorState { get; set; } = false;
+        public CursorManagementMode CursorMode { get; set; } = CursorManagementMode.Disabled;
+
+        /// <summary>
+        /// Back-compat switch. Use <see cref="CursorMode"/> for new code.
+        /// If set to true, cursor management becomes <see cref="CursorManagementMode.Always"/>.
+        /// If set to false, cursor management becomes <see cref="CursorManagementMode.WhenImGuiCapturesMouse"/>.
+        /// </summary>
+        public bool ForceCursorState
+        {
+            get => CursorMode == CursorManagementMode.Always;
+            set => CursorMode = value ? CursorManagementMode.Always : CursorManagementMode.WhenImGuiCapturesMouse;
+        }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ImGuiController"/> class.
@@ -86,7 +124,7 @@ namespace OpenTK.DearImGui
             {
                 LoadEmbeddedFont("Roboto-Regular.ttf", 16.0f * 1.0f);
             }
-            catch 
+            catch
             {
                 io.Fonts.AddFontDefault();
             }
@@ -244,11 +282,11 @@ namespace OpenTK.DearImGui
             unsafe
             {
                 ImFontConfig* nativeConfig = ImGuiNative.ImFontConfig_ImFontConfig();
-                nativeConfig->FontDataOwnedByAtlas = 0; 
+                nativeConfig->FontDataOwnedByAtlas = 0;
                 nativeConfig->FontData = (void*)pData;
                 nativeConfig->FontDataSize = fontData.Length;
                 nativeConfig->SizePixels = sizePixels;
-                nativeConfig->PixelSnapH = 1; 
+                nativeConfig->PixelSnapH = 1;
 
                 ImGui.GetIO().Fonts.AddFont(nativeConfig);
             }
@@ -367,61 +405,95 @@ namespace OpenTK.DearImGui
                 }
             }
 
-            if (io.ConfigFlags.HasFlag(ImGuiConfigFlags.NoMouseCursorChange)) return;
-
-            ImGuiMouseCursor imguiCursor = ImGui.GetMouseCursor();
-            MouseCursor openTKCursor = MouseCursor.Default;
-
-            if (!ForceCursorState)
-            {
-                if (io.WantCaptureMouse)
-                {
-                    if (io.MouseDrawCursor || imguiCursor == ImGuiMouseCursor.None)
-                    {
-                        wnd.CursorState = CursorState.Hidden;
-                    }
-                    else
-                    {
-                        wnd.CursorState = CursorState.Normal;
-                        switch (imguiCursor)
-                        {
-                            case ImGuiMouseCursor.Arrow: openTKCursor = MouseCursor.Default; break;
-                            case ImGuiMouseCursor.TextInput: openTKCursor = MouseCursor.IBeam; break;
-                            case ImGuiMouseCursor.ResizeAll: openTKCursor = MouseCursor.Crosshair; break;
-                            case ImGuiMouseCursor.ResizeNS: openTKCursor = MouseCursor.PointingHand; break;
-                            case ImGuiMouseCursor.ResizeEW: openTKCursor = MouseCursor.PointingHand; break;
-                            case ImGuiMouseCursor.Hand: openTKCursor = MouseCursor.PointingHand; break;
-                        }
-                        wnd.Cursor = openTKCursor;
-                    }
-                }
-            }
-            else
-            {
-                if (io.MouseDrawCursor || imguiCursor == ImGuiMouseCursor.None)
-                {
-                    wnd.CursorState = CursorState.Hidden;
-                }
-                else
-                {
-                    wnd.CursorState = CursorState.Normal;
-                    switch (imguiCursor)
-                    {
-                        case ImGuiMouseCursor.Arrow: openTKCursor = MouseCursor.Default; break;
-                        case ImGuiMouseCursor.TextInput: openTKCursor = MouseCursor.IBeam; break;
-                        case ImGuiMouseCursor.ResizeAll: openTKCursor = MouseCursor.Crosshair; break;
-                        case ImGuiMouseCursor.ResizeNS: openTKCursor = MouseCursor.PointingHand; break;
-                        case ImGuiMouseCursor.ResizeEW: openTKCursor = MouseCursor.PointingHand; break;
-                        case ImGuiMouseCursor.Hand: openTKCursor = MouseCursor.PointingHand; break;
-                    }
-                    wnd.Cursor = openTKCursor;
-                }
-            }
+            UpdateCursor(wnd, io);
         }
 
-        /// <summary>
-        /// Updates ImGui gamepad input state from the first connected joystick.
-        /// </summary>
+        private void UpdateCursor(GameWindow wnd, ImGuiIOPtr io)
+        {
+            if (io.ConfigFlags.HasFlag(ImGuiConfigFlags.NoMouseCursorChange))
+            {
+                RestoreCursorIfOverridden(wnd);
+                return;
+            }
+
+            if (CursorMode == CursorManagementMode.Disabled)
+            {
+                ReleaseCursorOverrideWithoutRestoring();
+                return;
+            }
+
+            if (wnd.CursorState == CursorState.Grabbed && CursorMode != CursorManagementMode.Always)
+            {
+                ReleaseCursorOverrideWithoutRestoring();
+                return;
+            }
+
+            bool shouldApplyImGuiCursor = CursorMode == CursorManagementMode.Always
+                || (CursorMode == CursorManagementMode.WhenImGuiCapturesMouse && io.WantCaptureMouse);
+
+            if (!shouldApplyImGuiCursor)
+            {
+                RestoreCursorIfOverridden(wnd);
+                return;
+            }
+
+            ImGuiMouseCursor imguiCursor = ImGui.GetMouseCursor();
+
+            if (!_cursorOverridden)
+            {
+                _cursorOverridden = true;
+                _cursorStateBeforeOverride = wnd.CursorState;
+                _cursorBeforeOverride = wnd.Cursor;
+            }
+
+            if (io.MouseDrawCursor || imguiCursor == ImGuiMouseCursor.None)
+            {
+                wnd.CursorState = CursorState.Hidden;
+                return;
+            }
+
+            wnd.CursorState = CursorState.Normal;
+            wnd.Cursor = ToOpenTkCursor(imguiCursor);
+        }
+
+        private void ReleaseCursorOverrideWithoutRestoring()
+        {
+            _cursorOverridden = false;
+            _cursorBeforeOverride = null;
+        }
+
+        private void RestoreCursorIfOverridden(GameWindow wnd)
+        {
+            if (!_cursorOverridden)
+            {
+                return;
+            }
+
+            wnd.CursorState = _cursorStateBeforeOverride;
+
+            if (_cursorBeforeOverride != null)
+            {
+                wnd.Cursor = _cursorBeforeOverride;
+            }
+
+            _cursorOverridden = false;
+            _cursorBeforeOverride = null;
+        }
+
+        private static MouseCursor ToOpenTkCursor(ImGuiMouseCursor imguiCursor)
+        {
+            return imguiCursor switch
+            {
+                ImGuiMouseCursor.Arrow => MouseCursor.Default,
+                ImGuiMouseCursor.TextInput => MouseCursor.IBeam,
+                ImGuiMouseCursor.ResizeAll => MouseCursor.Crosshair,
+                ImGuiMouseCursor.ResizeNS => MouseCursor.PointingHand,
+                ImGuiMouseCursor.ResizeEW => MouseCursor.PointingHand,
+                ImGuiMouseCursor.Hand => MouseCursor.PointingHand,
+                _ => MouseCursor.Default
+            };
+        }
+
         private void UpdateImGuiGamepad()
         {
             ImGuiIOPtr io = ImGui.GetIO();
@@ -744,6 +816,8 @@ namespace OpenTK.DearImGui
         /// </summary>
         public void Dispose()
         {
+            RestoreCursorIfOverridden(_wnd);
+
             GL.DeleteVertexArray(_vertexArray);
             GL.DeleteBuffer(_vertexBuffer);
             GL.DeleteBuffer(_indexBuffer);
