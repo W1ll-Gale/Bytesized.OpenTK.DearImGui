@@ -41,7 +41,7 @@ protected override void OnRenderFrame(FrameEventArgs args)
     GL.Clear(ClearBufferMask.ColorBufferBit);
 
     // Update ImGui (handles Input, Gamepad, and HighDPI scaling)
-    _controller.Update(this, (float)args.Time);
+    _controller.Update((float)args.Time);
 
     // --- Draw your UI here ---
     ImGuiNET.ImGui.ShowDemoWindow();
