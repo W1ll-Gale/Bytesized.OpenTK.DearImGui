@@ -280,6 +280,7 @@ namespace OpenTK.DearImGui
 
             string[] resourceNames = assembly.GetManifestResourceNames();
 
+
             string? resourcePath = resourceNames
                 .FirstOrDefault(r => r.EndsWith(resourceName, StringComparison.OrdinalIgnoreCase));
 
@@ -430,6 +431,7 @@ namespace OpenTK.DearImGui
                 {
                     wnd.ClipboardString = ImGui.GetClipboardText();
                 }
+
                 if (wnd.KeyboardState.IsKeyPressed(Keys.V))
                 {
                     ImGui.SetClipboardText(wnd.ClipboardString);
