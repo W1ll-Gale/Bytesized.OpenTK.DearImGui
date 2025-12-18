@@ -65,6 +65,7 @@ namespace OpenTK.DearImGui
         private MouseCursor? _cursorBeforeOverride;
 
         private readonly Action<TextInputEventArgs> _textInputHandler;
+        private static readonly Keys[] CachedKeys = Enum.GetValues<Keys>();
 
         /// <summary>
         /// Gets a value indicating whether ImGui wants to capture mouse input.
@@ -410,9 +411,10 @@ namespace OpenTK.DearImGui
             io.MouseWheel = mouse.Scroll.Y * MouseScrollScale;
             io.MouseWheelH = mouse.Scroll.X * MouseScrollScale;
 
-            foreach (Keys key in Enum.GetValues(typeof(Keys)))
+            foreach (Keys key in CachedKeys)
             {
                 if (key == Keys.Unknown) continue;
+
                 ImGuiKey imGuiKey = TranslateKey(key);
                 if (imGuiKey != ImGuiKey.None)
                 {
