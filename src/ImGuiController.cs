@@ -53,6 +53,12 @@ namespace OpenTK.DearImGui
         public float MouseScrollScale { get; set; } = 1.0f;
 
         /// <summary>
+        /// Gets or sets whether ImGuiController should force the window cursor state.
+        /// If false, cursor state is left to the application except when ImGui is actively capturing the mouse.
+        /// </summary>
+        public bool ForceCursorState { get; set; } = false;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ImGuiController"/> class.
         /// Sets up ImGui context, input events, and device resources.
         /// </summary>
@@ -366,13 +372,37 @@ namespace OpenTK.DearImGui
             ImGuiMouseCursor imguiCursor = ImGui.GetMouseCursor();
             MouseCursor openTKCursor = MouseCursor.Default;
 
-            if (io.MouseDrawCursor || imguiCursor == ImGuiMouseCursor.None)
+            if (!ForceCursorState)
             {
-                wnd.CursorState = CursorState.Hidden;
+                if (io.WantCaptureMouse)
+                {
+                    if (io.MouseDrawCursor || imguiCursor == ImGuiMouseCursor.None)
+                    {
+                        wnd.CursorState = CursorState.Hidden;
+                    }
+                    else
+                    {
+                        wnd.CursorState = CursorState.Normal;
+                        switch (imguiCursor)
+                        {
+                            case ImGuiMouseCursor.Arrow: openTKCursor = MouseCursor.Default; break;
+                            case ImGuiMouseCursor.TextInput: openTKCursor = MouseCursor.IBeam; break;
+                            case ImGuiMouseCursor.ResizeAll: openTKCursor = MouseCursor.Crosshair; break;
+                            case ImGuiMouseCursor.ResizeNS: openTKCursor = MouseCursor.PointingHand; break;
+                            case ImGuiMouseCursor.ResizeEW: openTKCursor = MouseCursor.PointingHand; break;
+                            case ImGuiMouseCursor.Hand: openTKCursor = MouseCursor.PointingHand; break;
+                        }
+                        wnd.Cursor = openTKCursor;
+                    }
+                }
             }
             else
             {
-                if (io.WantCaptureMouse)
+                if (io.MouseDrawCursor || imguiCursor == ImGuiMouseCursor.None)
+                {
+                    wnd.CursorState = CursorState.Hidden;
+                }
+                else
                 {
                     wnd.CursorState = CursorState.Normal;
                     switch (imguiCursor)
