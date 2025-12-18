@@ -64,6 +64,8 @@ namespace OpenTK.DearImGui
         private CursorState _cursorStateBeforeOverride;
         private MouseCursor? _cursorBeforeOverride;
 
+        private readonly Action<TextInputEventArgs> _textInputHandler;
+
         /// <summary>
         /// Gets a value indicating whether ImGui wants to capture mouse input.
         /// </summary>
@@ -108,7 +110,8 @@ namespace OpenTK.DearImGui
             _windowWidth = wnd.ClientSize.X;
             _windowHeight = wnd.ClientSize.Y;
 
-            _wnd.TextInput += (e) => PressChar((uint)e.Unicode);
+            _textInputHandler = (e) => PressChar((uint)e.Unicode);
+            _wnd.TextInput += _textInputHandler;
 
             IntPtr context = ImGui.CreateContext();
             ImGui.SetCurrentContext(context);
@@ -829,10 +832,7 @@ namespace OpenTK.DearImGui
                 ImGui.DestroyContext();
             }
 
-            if (_wnd != null)
-            {
-                _wnd.TextInput -= (e) => PressChar((uint)e.Unicode);
-            }
+            _wnd.TextInput -= _textInputHandler;
         }
     }
 }
