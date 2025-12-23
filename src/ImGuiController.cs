@@ -64,6 +64,8 @@ namespace OpenTK.DearImGui
         private CursorState _cursorStateBeforeOverride;
         private MouseCursor? _cursorBeforeOverride;
 
+        private Vector2 _previousScroll;
+
         private readonly Action<TextInputEventArgs> _textInputHandler;
         private static readonly Keys[] CachedKeys = Enum.GetValues<Keys>();
 
@@ -406,8 +408,11 @@ namespace OpenTK.DearImGui
             Vector2i point = screenPoint;
             io.MousePos = new Vector2(point.X / _scaleFactor.X, point.Y / _scaleFactor.Y);
 
-            io.MouseWheel = mouse.Scroll.Y * MouseScrollScale;
-            io.MouseWheelH = mouse.Scroll.X * MouseScrollScale;
+            // Will: The fix is here. We calculate the difference between the current scroll
+            // and the previous scroll, rather than using the raw absolute value.
+            io.MouseWheel = (mouse.Scroll.Y - _previousScroll.Y) * MouseScrollScale;
+            io.MouseWheelH = (mouse.Scroll.X - _previousScroll.X) * MouseScrollScale;
+            _previousScroll = mouse.Scroll;
 
             foreach (Keys key in CachedKeys)
             {
