@@ -7,7 +7,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
 	<PackageId>Bytesized.OpenTK.DearImGui</PackageId>     
-    <Version>1.2.3</Version>
+    <Version>1.3.0</Version>
     <Authors>MrBytesized</Authors>
     <Company>BytesizedMedia</Company>
     <Product>OpenTK DearImGui</Product>

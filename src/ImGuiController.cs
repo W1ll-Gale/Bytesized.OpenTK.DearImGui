@@ -66,8 +66,28 @@ namespace OpenTK.DearImGui
 
         private OpenTK.Mathematics.Vector2 _previousScroll;
 
+        private readonly int[] _lastViewport = new int[4];
+        private readonly int[] _lastScissor = new int[4];
+
+        private static readonly Keys[] KeysToCheck;
+
         private readonly Action<TextInputEventArgs> _textInputHandler;
-        private static readonly Keys[] CachedKeys = Enum.GetValues<Keys>();
+
+        /// <summary>
+        /// Static constructor to populate the efficient key list once.
+        /// </summary>
+        static ImGuiController()
+        {
+            List<Keys> keys = new List<Keys>();
+            foreach (Keys key in Enum.GetValues<Keys>())
+            {
+                if (key != Keys.Unknown && TranslateKey(key) != ImGuiKey.None)
+                {
+                    keys.Add(key);
+                }
+            }
+            KeysToCheck = keys.ToArray();
+        }
 
         /// <summary>
         /// Gets a value indicating whether ImGui wants to capture mouse input.
@@ -102,6 +122,13 @@ namespace OpenTK.DearImGui
         }
 
         /// <summary>
+        /// Gets or sets whether the controller should automatically save and restore OpenGL state 
+        /// (viewport, scissor, polygon mode, blend mode) during rendering.
+        /// <para>Defaults to true. Set to false for a performance boost if you handle state management yourself.</para>
+        /// </summary>
+        public bool AutoSaveRestoreState { get; set; } = true;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ImGuiController"/> class.
         /// Sets up ImGui context, input events, and device resources.
         /// </summary>
@@ -113,6 +140,8 @@ namespace OpenTK.DearImGui
             _windowWidth = wnd.ClientSize.X;
             _windowHeight = wnd.ClientSize.Y;
 
+            _previousScroll = _wnd.MouseState.Scroll;
+
             _textInputHandler = (e) => PressChar((uint)e.Unicode);
             _wnd.TextInput += _textInputHandler;
 
@@ -122,15 +151,20 @@ namespace OpenTK.DearImGui
 
             io.ConfigFlags |= ImGuiConfigFlags.DockingEnable;
 
+            io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
+
             io.BackendFlags |= ImGuiBackendFlags.RendererHasVtxOffset;
             io.BackendFlags |= ImGuiBackendFlags.HasMouseCursors;
             io.BackendFlags |= ImGuiBackendFlags.HasGamepad;
 
+            bool fontLoaded = false;
             try
             {
-                LoadEmbeddedFont("Roboto-Regular.ttf", 16.0f * 1.0f);
+                fontLoaded = LoadEmbeddedFont("Roboto-Regular.ttf", 16.0f * 1.0f);
             }
-            catch
+            catch { }
+
+            if (!fontLoaded)
             {
                 io.Fonts.AddFontDefault();
             }
@@ -408,21 +442,14 @@ namespace OpenTK.DearImGui
             Vector2i point = screenPoint;
             io.MousePos = new Vector2(point.X / _scaleFactor.X, point.Y / _scaleFactor.Y);
 
-            // Will: The fix is here. We calculate the difference between the current scroll
-            // and the previous scroll, rather than using the raw absolute value.
             io.MouseWheel = (mouse.Scroll.Y - _previousScroll.Y) * MouseScrollScale;
             io.MouseWheelH = (mouse.Scroll.X - _previousScroll.X) * MouseScrollScale;
             _previousScroll = mouse.Scroll;
 
-            foreach (Keys key in CachedKeys)
+            foreach (Keys key in KeysToCheck)
             {
-                if (key == Keys.Unknown) continue;
-
                 ImGuiKey imGuiKey = TranslateKey(key);
-                if (imGuiKey != ImGuiKey.None)
-                {
-                    io.AddKeyEvent(imGuiKey, keyboard.IsKeyDown(key));
-                }
+                io.AddKeyEvent(imGuiKey, keyboard.IsKeyDown(key));
             }
 
             io.AddKeyEvent(ImGuiKey.ModCtrl, keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl));
@@ -578,7 +605,7 @@ namespace OpenTK.DearImGui
         /// </summary>
         /// <param name="key">The OpenTK key.</param>
         /// <returns>The corresponding ImGuiKey, or ImGuiKey.None if not mapped.</returns>
-        private ImGuiKey TranslateKey(Keys key)
+        private static ImGuiKey TranslateKey(Keys key)
         {
             if (key >= Keys.D0 && key <= Keys.D9) return ImGuiKey._0 + (key - Keys.D0);
             if (key >= Keys.A && key <= Keys.Z) return ImGuiKey.A + (key - Keys.A);
@@ -672,25 +699,40 @@ namespace OpenTK.DearImGui
         /// <param name="draw_data">The ImGui draw data to render.</param>
         private void RenderImDrawData(ImDrawDataPtr draw_data)
         {
+            unsafe
+            {
+                if (draw_data.NativePtr == null) return;
+            }
+
             if (draw_data.CmdListsCount == 0) return;
 
-            int[] lastViewport = new int[4];
-            int[] lastScissor = new int[4];
-            int lastPolygonMode;
-            int lastBlendSrc;
-            int lastBlendDst;
+            int lastPolygonMode = 0;
+            int lastBlendSrc = 0;
+            int lastBlendDst = 0;
+            int lastBlendEquationRgb = 0;
+            int lastBlendEquationAlpha = 0;
+            bool lastEnableBlend = false;
+            bool lastEnableCullFace = false;
+            bool lastEnableDepthTest = false;
+            bool lastEnableScissorTest = false;
 
-            GL.GetInteger(GetPName.Viewport, lastViewport);
-            GL.GetInteger(GetPName.ScissorBox, lastScissor);
-            GL.GetInteger(GetPName.PolygonMode, out lastPolygonMode);
-            GL.GetInteger(GetPName.BlendSrc, out lastBlendSrc);
-            GL.GetInteger(GetPName.BlendDst, out lastBlendDst);
-            bool lastEnableBlend = GL.IsEnabled(EnableCap.Blend);
-            bool lastEnableCullFace = GL.IsEnabled(EnableCap.CullFace);
-            bool lastEnableDepthTest = GL.IsEnabled(EnableCap.DepthTest);
-            bool lastEnableScissorTest = GL.IsEnabled(EnableCap.ScissorTest);
+            if (AutoSaveRestoreState)
+            {
+                GL.GetInteger(GetPName.Viewport, _lastViewport);
+                GL.GetInteger(GetPName.ScissorBox, _lastScissor);
+                GL.GetInteger(GetPName.PolygonMode, out lastPolygonMode);
+                GL.GetInteger(GetPName.BlendSrc, out lastBlendSrc);
+                GL.GetInteger(GetPName.BlendDst, out lastBlendDst);
+                GL.GetInteger(GetPName.BlendEquationRgb, out lastBlendEquationRgb);
+                GL.GetInteger(GetPName.BlendEquationAlpha, out lastBlendEquationAlpha);
+                lastEnableBlend = GL.IsEnabled(EnableCap.Blend);
+                lastEnableCullFace = GL.IsEnabled(EnableCap.CullFace);
+                lastEnableDepthTest = GL.IsEnabled(EnableCap.DepthTest);
+                lastEnableScissorTest = GL.IsEnabled(EnableCap.ScissorTest);
+            }
 
             GL.Enable(EnableCap.Blend);
+            GL.BlendEquation(BlendEquationMode.FuncAdd); 
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.Disable(EnableCap.CullFace);
             GL.Disable(EnableCap.DepthTest);
@@ -747,6 +789,9 @@ namespace OpenTK.DearImGui
                 GL.VertexAttribPointer(2, 4, VertexAttribPointerType.UnsignedByte, true, Unsafe.SizeOf<ImDrawVert>(), 16);
 
                 int idx_offset = 0;
+
+                int lastTextureId = -1;
+
                 for (int cmd_i = 0; cmd_i < cmd_list.CmdBuffer.Size; cmd_i++)
                 {
                     ImDrawCmdPtr pcmd = cmd_list.CmdBuffer[cmd_i];
@@ -756,8 +801,12 @@ namespace OpenTK.DearImGui
                     }
                     else
                     {
-                        GL.ActiveTexture(TextureUnit.Texture0);
-                        GL.BindTexture(TextureTarget.Texture2D, (int)pcmd.TextureId);
+                        if ((int)pcmd.TextureId != lastTextureId)
+                        {
+                            GL.ActiveTexture(TextureUnit.Texture0);
+                            GL.BindTexture(TextureTarget.Texture2D, (int)pcmd.TextureId);
+                            lastTextureId = (int)pcmd.TextureId;
+                        }
 
                         System.Numerics.Vector4 clip = pcmd.ClipRect;
                         GL.Scissor((int)clip.X, _windowHeight - (int)clip.W, (int)(clip.Z - clip.X), (int)(clip.W - clip.Y));
@@ -770,15 +819,19 @@ namespace OpenTK.DearImGui
 
             GL.BindVertexArray(0);
 
-            if (lastEnableScissorTest) GL.Enable(EnableCap.ScissorTest); else GL.Disable(EnableCap.ScissorTest);
-            if (lastEnableCullFace) GL.Enable(EnableCap.CullFace); else GL.Disable(EnableCap.CullFace);
-            if (lastEnableDepthTest) GL.Enable(EnableCap.DepthTest); else GL.Disable(EnableCap.DepthTest);
-            if (lastEnableBlend) GL.Enable(EnableCap.Blend); else GL.Disable(EnableCap.Blend);
+            if (AutoSaveRestoreState)
+            {
+                if (lastEnableScissorTest) GL.Enable(EnableCap.ScissorTest); else GL.Disable(EnableCap.ScissorTest);
+                if (lastEnableCullFace) GL.Enable(EnableCap.CullFace); else GL.Disable(EnableCap.CullFace);
+                if (lastEnableDepthTest) GL.Enable(EnableCap.DepthTest); else GL.Disable(EnableCap.DepthTest);
+                if (lastEnableBlend) GL.Enable(EnableCap.Blend); else GL.Disable(EnableCap.Blend);
 
-            GL.PolygonMode(TriangleFace.FrontAndBack, (PolygonMode)lastPolygonMode);
-            GL.BlendFunc((BlendingFactor)lastBlendSrc, (BlendingFactor)lastBlendDst);
-            GL.Viewport(lastViewport[0], lastViewport[1], lastViewport[2], lastViewport[3]);
-            GL.Scissor(lastScissor[0], lastScissor[1], lastScissor[2], lastScissor[3]);
+                GL.PolygonMode(TriangleFace.FrontAndBack, (PolygonMode)lastPolygonMode);
+                GL.BlendEquationSeparate((BlendEquationMode)lastBlendEquationRgb, (BlendEquationMode)lastBlendEquationAlpha);
+                GL.BlendFunc((BlendingFactor)lastBlendSrc, (BlendingFactor)lastBlendDst);
+                GL.Viewport(_lastViewport[0], _lastViewport[1], _lastViewport[2], _lastViewport[3]);
+                GL.Scissor(_lastScissor[0], _lastScissor[1], _lastScissor[2], _lastScissor[3]);
+            }
         }
 
         /// <summary>
@@ -866,6 +919,7 @@ namespace OpenTK.DearImGui
             }
 
             _wnd.TextInput -= _textInputHandler;
+            GC.SuppressFinalize(this);
         }
     }
 }
