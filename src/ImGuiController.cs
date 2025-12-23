@@ -64,7 +64,7 @@ namespace OpenTK.DearImGui
         private CursorState _cursorStateBeforeOverride;
         private MouseCursor? _cursorBeforeOverride;
 
-        private Vector2 _previousScroll;
+        private OpenTK.Mathematics.Vector2 _previousScroll;
 
         private readonly Action<TextInputEventArgs> _textInputHandler;
         private static readonly Keys[] CachedKeys = Enum.GetValues<Keys>();
